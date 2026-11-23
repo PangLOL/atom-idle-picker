@@ -1,8 +1,8 @@
 # Atom idle frame picker
 
-A 15 fps preview for choosing Sonic idle frames on the Atom S3R dashboard.
+A 15 fps preview for choosing Sonic's 8 idle frames on the Atom S3R dashboard.
 
-The stance can be held, then the foot-rub frames play, so the rub is periodic instead of constant.
+Check the frames you want; the preview loops only that pick. Five checked frames means a 5-frame loop, with no extra hold steps.
 
 Official Sonic Rush DS E3 placeholder sprites are © SEGA. They are used here as a reference preview only and are not packed into the dashboard firmware.
 

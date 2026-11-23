@@ -117,8 +117,7 @@
   <header>
     <h1>Atom idle frame picker</h1>
     <p>
-      Choose idle frames by number, set how long each one holds, and preview the cycle at 15&nbsp;fps.
-      Use a long hold on the stance, then the foot-rub frames, so the rub is periodic instead of constant.
+      Idle is 8 frames. Check the ones you want, and the preview loops only that pick at 15&nbsp;fps — five checked frames means a 5-frame loop.
       These are flipped official Sonic Rush DS E3 placeholder sprites, ©&nbsp;SEGA — reference preview only, not packed into firmware.
     </p>
   </header>
@@ -138,28 +137,19 @@
         </div>
       </div>
       <div class="seq-panel">
-        <h2>Sequence</h2>
-        <p>Click a sprite below to append that frame. Click a chip here to remove it.</p>
-        <div class="chips" id="chips"></div>
-        <p><code id="seq-text">1</code></p>
-        <div class="presets">
-          <button type="button" id="preset-constant">Constant rub (1–8)</button>
-          <button type="button" id="preset-periodic" class="primary">Periodic rub</button>
-          <button type="button" id="preset-stance">Stance only (1)</button>
-        </div>
-        <div class="holds">
-          <label>Stance hold (frame 1): <input type="number" id="hold1" min="1" max="180" value="30"> frames (<span id="hold1s">2.0</span>s)</label>
-        </div>
+        <h2>Idle loop</h2>
+        <p>The preview plays only the checked idle frames, in order, and then repeats. It never pads the loop with extra holds.</p>
+        <p>Looping <code id="seq-text">1, 2, 3, 4, 5, 6, 7, 8</code></p>
         <p class="note" id="cycle-len"></p>
         <div class="controls">
-          <button type="button" id="btn-apply">Rebuild from checked + stance hold</button>
-          <button type="button" id="btn-copy">Copy sequence</button>
+          <button type="button" id="btn-all">Check all 8</button>
+          <button type="button" id="btn-copy">Copy frame list</button>
         </div>
       </div>
     </div>
 
     <h2>Idle frames</h2>
-    <p>Check the frames to include. Uncheck ones you do not want in the periodic cycle.</p>
+    <p>Check a frame to include it in the loop. Uncheck it to drop it. The loop length is always the number of frames you have checked, up to 8.</p>
     <div class="grid" id="idle-grid"></div>
 
     <h2>Idle trigger</h2>
@@ -221,73 +211,55 @@
     const ctx = canvas.getContext("2d");
     ctx.imageSmoothingEnabled = false;
 
+    function pickedIdle() {
+      const seq = [];
+      for (let i = 1; i <= 8; i++) if (checked[i - 1]) seq.push(i);
+      return seq;
+    }
+
     function fmtSeq(seq) {
-      if (!seq.length) return "(empty)";
-      const parts = [];
-      let run = 1;
-      for (let i = 1; i <= seq.length; i++) {
-        if (i < seq.length && seq[i] === seq[i - 1]) run++;
-        else {
-          parts.push(run > 1 ? `${seq[i - 1]}×${run}` : String(seq[i - 1]));
-          run = 1;
-        }
-      }
-      return parts.join(", ");
+      return seq.length ? seq.join(", ") : "(none)";
     }
 
     function cycleSeconds(seq) {
       return (seq.length / FPS).toFixed(2);
     }
 
-    function renderChips() {
-      const box = document.getElementById("chips");
-      box.innerHTML = "";
-      sequence.forEach((n, i) => {
-        const el = document.createElement("button");
-        el.type = "button";
-        el.className = "chip";
-        el.textContent = n;
-        el.title = "Remove this step";
-        el.addEventListener("click", () => {
-          sequence.splice(i, 1);
-          if (seqI >= sequence.length) seqI = 0;
-          syncSeq();
-        });
-        box.appendChild(el);
-      });
+    function syncLoop() {
+      if (mode === "idle") {
+        const next = pickedIdle();
+        const cur = sequence[seqI];
+        sequence = next;
+        const found = sequence.indexOf(cur);
+        seqI = found >= 0 ? found : 0;
+        acc = 0;
+      }
       document.getElementById("seq-text").textContent = fmtSeq(sequence);
       document.getElementById("stept").textContent = String(sequence.length || 1);
-      document.getElementById("cycle-len").textContent = sequence.length
-        ? `One loop is ${sequence.length} steps, ${cycleSeconds(sequence)}s at 15 fps.`
-        : "Add at least one frame to play.";
+      const n = sequence.length;
+      document.getElementById("cycle-len").textContent = n
+        ? n + " frame" + (n === 1 ? "" : "s") + " in the loop, " + cycleSeconds(sequence) + "s at 15 fps."
+        : "Check at least one idle frame to play.";
     }
 
-    function syncSeq() {
-      renderChips();
+    function setIdleLoop() {
+      mode = "idle";
+      sequence = pickedIdle();
+      seqI = 0;
+      acc = 0;
+      syncLoop();
     }
 
-    function setSequence(seq) {
+    function setTempLoop(name, seq) {
+      mode = name;
       sequence = seq.slice();
       seqI = 0;
       acc = 0;
-      syncSeq();
-    }
-
-    function periodicSeq() {
-      const hold = Math.max(1, parseInt(document.getElementById("hold1").value, 10) || 30);
-      const seq = [];
-      for (let i = 0; i < hold; i++) seq.push(1);
-      for (let i = 2; i <= 8; i++) if (checked[i - 1]) seq.push(i);
-      if (seq.length === hold && checked[0]) {
-        // only frame 1 was checked; already held
-      }
-      return seq;
-    }
-
-    function constantSeq() {
-      const seq = [];
-      for (let i = 1; i <= 8; i++) if (checked[i - 1]) seq.push(i);
-      return seq.length ? seq : [1];
+      document.getElementById("seq-text").textContent = fmtSeq(sequence);
+      document.getElementById("stept").textContent = String(sequence.length || 1);
+      document.getElementById("cycle-len").textContent = sequence.length
+        ? sequence.length + " frames in this preview, " + cycleSeconds(sequence) + "s at 15 fps."
+        : "";
     }
 
     function draw() {
@@ -309,7 +281,13 @@
         }
       }
       const list = mode === "trigger" ? trigImgs : mode === "hockey" ? hockeyImgs : idleImgs;
-      const seq = sequence.length ? sequence : [1];
+      if (!sequence.length) {
+        document.getElementById("now").textContent = "—";
+        document.getElementById("stepn").textContent = "0";
+        document.getElementById("stept").textContent = "0";
+        return;
+      }
+      const seq = sequence;
       const frameN = seq[Math.min(seqI, seq.length - 1)];
       const im = list[frameN - 1];
       if (im && im.complete) {
@@ -340,27 +318,24 @@
       cell.className = "cell" + (opts.checkable && checked[index] ? " checked" : "");
       const thumb = document.createElement("img");
       thumb.className = "thumb";
-      thumb.alt = `Frame ${index + 1}`;
+      thumb.alt = "Frame " + (index + 1);
       thumb.src = img.src.replace("_39x36.png", ".png");
       const lab = document.createElement("label");
       if (opts.checkable) {
         const cb = document.createElement("input");
         cb.type = "checkbox";
         cb.checked = checked[index];
-        cb.addEventListener("change", () => {
+        const apply = () => {
           checked[index] = cb.checked;
           cell.classList.toggle("checked", cb.checked);
-        });
+          setIdleLoop();
+          setPlaying(true);
+        };
+        cb.addEventListener("change", apply);
+        thumb.addEventListener("click", () => { cb.checked = !cb.checked; apply(); });
         lab.appendChild(cb);
       }
-      lab.appendChild(document.createTextNode(`Frame ${index + 1}`));
-      thumb.addEventListener("click", () => {
-        if (opts.append) {
-          mode = "idle";
-          sequence.push(index + 1);
-          syncSeq();
-        }
-      });
+      lab.appendChild(document.createTextNode("Frame " + (index + 1)));
       cell.appendChild(thumb);
       cell.appendChild(lab);
       grid.appendChild(cell);
@@ -372,28 +347,14 @@
       document.getElementById("status").textContent = on ? "playing" : "paused";
     }
 
-    document.getElementById("hold1").addEventListener("input", () => {
-      const n = Math.max(1, parseInt(document.getElementById("hold1").value, 10) || 30);
-      document.getElementById("hold1s").textContent = (n / FPS).toFixed(1);
-    });
-    document.getElementById("preset-constant").addEventListener("click", () => {
-      mode = "idle";
-      setSequence(constantSeq());
-      setPlaying(true);
-    });
-    document.getElementById("preset-periodic").addEventListener("click", () => {
-      mode = "idle";
-      setSequence(periodicSeq());
-      setPlaying(true);
-    });
-    document.getElementById("preset-stance").addEventListener("click", () => {
-      mode = "idle";
-      setSequence([1]);
-      setPlaying(true);
-    });
-    document.getElementById("btn-apply").addEventListener("click", () => {
-      mode = "idle";
-      setSequence(periodicSeq());
+    document.getElementById("btn-all").addEventListener("click", () => {
+      checked = [true, true, true, true, true, true, true, true];
+      document.querySelectorAll("#idle-grid .cell").forEach((cell, i) => {
+        cell.classList.add("checked");
+        const cb = cell.querySelector("input[type=checkbox]");
+        if (cb) cb.checked = true;
+      });
+      setIdleLoop();
       setPlaying(true);
     });
     document.getElementById("btn-play").addEventListener("click", () => setPlaying(!playing));
@@ -413,21 +374,18 @@
       const text = fmtSeq(sequence);
       try { await navigator.clipboard.writeText(text); } catch (err) {}
       document.getElementById("btn-copy").textContent = "Copied";
-      setTimeout(() => { document.getElementById("btn-copy").textContent = "Copy sequence"; }, 1200);
+      setTimeout(() => { document.getElementById("btn-copy").textContent = "Copy frame list"; }, 1200);
     });
     document.getElementById("btn-trigger").addEventListener("click", () => {
-      mode = "trigger";
-      setSequence([1, 2, 3, 4, 5, 6, 7, 8]);
+      setTempLoop("trigger", [1, 2, 3, 4, 5, 6, 7, 8]);
       setPlaying(true);
     });
     document.getElementById("btn-idle").addEventListener("click", () => {
-      mode = "idle";
-      setSequence(periodicSeq());
+      setIdleLoop();
       setPlaying(true);
     });
     document.getElementById("btn-hockey").addEventListener("click", () => {
-      mode = "hockey";
-      setSequence([1, 2, 3]);
+      setTempLoop("hockey", [1, 2, 3]);
       setPlaying(true);
     });
 
@@ -438,12 +396,12 @@
       new Promise((res) => { if (scene.complete) res(); else scene.onload = res; }),
     ]).then(() => {
       const idleGrid = document.getElementById("idle-grid");
-      idleImgs.forEach((im, i) => makeCell(im, i, idleGrid, { checkable: true, append: true }));
+      idleImgs.forEach((im, i) => makeCell(im, i, idleGrid, { checkable: true }));
       const trigGrid = document.getElementById("trig-grid");
-      trigImgs.forEach((im, i) => makeCell(im, i, trigGrid, { checkable: false, append: false }));
+      trigImgs.forEach((im, i) => makeCell(im, i, trigGrid, { checkable: false }));
       const hGrid = document.getElementById("hockey-grid");
-      hockeyImgs.forEach((im, i) => makeCell(im, i, hGrid, { checkable: false, append: false }));
-      setSequence(periodicSeq());
+      hockeyImgs.forEach((im, i) => makeCell(im, i, hGrid, { checkable: false }));
+      setIdleLoop();
       requestAnimationFrame(tick);
     }).catch((err) => {
       document.getElementById("status").textContent = "failed to load frames";
